@@ -1,0 +1,18 @@
+{
+  "repository": "pgm-testing/sbom-demo-go",
+  "action_revision": "ed68e4cc4c42a25a88a12f8ac26f520986851ec5",
+  "probes": [
+    {
+      "name": "nebu",
+      "purl": "pkg:golang/github.com/withObsrvr/nebu",
+      "version": "v0.7.2",
+      "repo": "pkg:github/withObsrvr/nebu"
+    },
+    {
+      "name": "UUID control",
+      "purl": "pkg:golang/github.com/google/uuid",
+      "version": "v1.6.0",
+      "repo": null
+    }
+  ]
+}

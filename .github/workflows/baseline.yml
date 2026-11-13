@@ -1,0 +1,73 @@
+name: go SBOM baseline
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Prepare evidence directory
+        run: mkdir -p evidence
+      - name: Validate coverage assertions
+        run: python3 -m unittest -v
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: "1.26.11"
+          cache: false
+      - name: Resolve and exercise dependencies
+        run: |
+          go mod tidy
+          go run .
+          go version > evidence/toolchain.txt
+      - name: Fetch and submit using unchanged Atlas Action
+        id: atlas
+        uses: SCF-Public-Goods-Maintenance/pg-atlas-sbom-action@ed68e4cc4c42a25a88a12f8ac26f520986851ec5
+      - name: Check exported SBOM
+        if: always() && steps.atlas.outputs.sbom-path != ''
+        run: python3 check.py sbom
+      - name: Find exact Atlas submission
+        id: submission
+        if: always() && steps.atlas.outcome == 'success'
+        run: python3 check.py submission
+      - name: Check processed Atlas relationships
+        if: always() && steps.submission.outputs.submission_id != ''
+        run: python3 check.py atlas --submission-id "${{ steps.submission.outputs.submission_id }}"
+      - name: Record run references
+        if: always()
+        env:
+          COMMIT: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          mkdir -p evidence
+          python3 -c 'import os,json; from pathlib import Path; Path("evidence/run.json").write_text(json.dumps({k:os.environ[k] for k in ["COMMIT","REPOSITORY","RUN_ID"]},indent=2))'
+          cp expected.json evidence/expected.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: baseline-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 30
+          path: |
+            evidence/
+            sbom.spdx.json
+            response.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: fixture-locks
+          if-no-files-found: ignore
+          path: |
+            package-lock.json
+            Cargo.lock
+            Package.resolved
+            pubspec.lock
+            packages.lock.json
+            composer.lock
+            go.sum
+            gradle.lockfile

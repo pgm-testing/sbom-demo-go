@@ -1,0 +1,13 @@
+evidence/
+__pycache__/
+node_modules/
+target/
+build/
+.gradle/
+.build/
+.dart_tool/
+bin/
+obj/
+vendor/
+sbom.spdx.json
+response.json
