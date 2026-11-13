@@ -22,8 +22,8 @@ jobs:
           cache: false
       - name: Resolve and exercise dependencies
         run: |
-          go mod tidy
-          go run .
+          go mod verify
+          go run -mod=readonly .
           go version > evidence/toolchain.txt
       - name: Fetch and submit using unchanged Atlas Action
         id: atlas
