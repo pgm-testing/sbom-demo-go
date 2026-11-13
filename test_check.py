@@ -1,7 +1,7 @@
 import copy
 import unittest
 from unittest.mock import patch
-from check import assert_sbom, atlas_result, semantic_hash
+from check import assert_sbom, atlas_result, semantic_hash, wait_for_processing
 
 
 class CoverageTests(unittest.TestCase):
@@ -92,6 +92,45 @@ class CoverageTests(unittest.TestCase):
         other = copy.deepcopy(self.doc)
         other["relationships"] = []
         self.assertNotEqual(semantic_hash(self.doc), semantic_hash(other))
+
+
+    def test_processing_polls_until_processed(self):
+        clock = [0]
+        states = iter([{"id": 9, "repository_claim": self.expected["repository"], "status": "pending"},
+                       {"id": 9, "repository_claim": self.expected["repository"], "status": "processed"}])
+        def fetch(_): return next(states)
+        def sleep(seconds): clock[0] += seconds
+        with patch("check.get", side_effect=[{"project_id": None}, [{"canonical_id": self.expected["probes"][0]["repo"]}]]):
+            result, code = wait_for_processing(9, self.expected, 30, 15,
+                fetch=fetch, clock=lambda: clock[0], sleep=sleep)
+        self.assertEqual(code, 0)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["poll_attempts"], 2)
+        self.assertTrue(result["verification_complete"])
+
+    def test_processing_timeout_is_pending_not_pass_or_failure(self):
+        clock = [0]
+        submission = {"id": 9, "repository_claim": self.expected["repository"], "status": "pending"}
+        def sleep(seconds): clock[0] += seconds
+        result, code = wait_for_processing(9, self.expected, 30, 15,
+            fetch=lambda _: submission, clock=lambda: clock[0], sleep=sleep)
+        self.assertEqual(code, 0)
+        self.assertEqual(result["status"], "pending-timeout")
+        self.assertFalse(result["verification_complete"])
+        self.assertEqual(result["waited_seconds"], 30)
+
+    def test_failed_processing_remains_error(self):
+        submission = {"id": 9, "repository_claim": self.expected["repository"], "status": "failed", "error_detail": "bad payload"}
+        result, code = wait_for_processing(9, self.expected, 30, 15, fetch=lambda _: submission)
+        self.assertEqual(code, 2)
+        self.assertEqual(result["status"], "failed")
+
+    def test_processed_missing_relationship_remains_failure(self):
+        submission = {"id": 9, "repository_claim": self.expected["repository"], "status": "processed"}
+        with patch("check.get", side_effect=[{"project_id": None}, []]):
+            result, code = wait_for_processing(9, self.expected, 30, 15, fetch=lambda _: submission)
+        self.assertEqual(code, 1)
+        self.assertEqual(result["status"], "coverage-failure")
 
 
 if __name__ == "__main__":

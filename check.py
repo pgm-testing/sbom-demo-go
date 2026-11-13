@@ -1,4 +1,4 @@
-"""Read-only coverage checks. Exit: 0 pass, 1 coverage failure, 2 error, 3 pending."""
+"""Read-only checks. Exit 0: pass or explicit pending-timeout; 1: coverage failure; 2: error; 3: submission not found. Inspect status and verification_complete."""
 import argparse
 import hashlib
 import json
@@ -135,6 +135,28 @@ def atlas_result(submission, expected):
             "edges": edges, "probes": probes}, 0 if success else 1
 
 
+def wait_for_processing(submission_id, expected, wait_seconds, poll_interval,
+                        fetch=get, clock=time.monotonic, sleep=time.sleep):
+    started = clock()
+    deadline = started + wait_seconds
+    attempts = 0
+    while True:
+        attempts += 1
+        submission = fetch("/ingest/sbom/" + str(submission_id))
+        result, code = atlas_result(submission, expected)
+        result.update(poll_attempts=attempts, waited_seconds=round(clock() - started, 2))
+        if code != 3:
+            result["verification_complete"] = True
+            return result, code
+        remaining = deadline - clock()
+        if remaining <= 0:
+            result.update(status="pending-timeout", verification_complete=False,
+                next_step="Run verify-atlas.yml with this submission ID after processing finishes. Pending is not a coverage pass.")
+            return result, 0
+        print("Submission " + str(submission_id) + " is still processing; waiting before verification.", flush=True)
+        sleep(min(poll_interval, remaining))
+
+
 def save(name, value):
     path = Path("evidence")
     path.mkdir(exist_ok=True)
@@ -153,6 +175,8 @@ def main():
     parser.add_argument("--sbom", default="sbom.spdx.json")
     parser.add_argument("--submission-id", type=int)
     parser.add_argument("--wait-seconds", type=int, default=90)
+    parser.add_argument("--processing-wait-seconds", type=int, default=300)
+    parser.add_argument("--poll-interval", type=int, default=15)
     args = parser.parse_args()
     expected = json.loads(Path("expected.json").read_text())
     try:
@@ -183,7 +207,10 @@ def main():
         else:
             if not args.submission_id or args.submission_id < 1:
                 raise ValueError("A positive --submission-id is required")
-            result, code = atlas_result(get("/ingest/sbom/" + str(args.submission_id)), expected)
+            if args.processing_wait_seconds < 0 or args.poll_interval < 1:
+                raise ValueError("Processing wait must be nonnegative and poll interval positive")
+            result, code = wait_for_processing(args.submission_id, expected,
+                args.processing_wait_seconds, args.poll_interval)
     except (OSError, ValueError, KeyError, TypeError) as error:
         result, code = {"stage": args.stage, "status": "error", "error": str(error)}, 2
     save(args.stage + "-result.json", result)
