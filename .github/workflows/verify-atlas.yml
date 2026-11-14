@@ -3,9 +3,10 @@ on:
   workflow_dispatch:
     inputs:
       submission_id:
-        description: Submission ID from the baseline evidence
+        description: Submission ID (original Go baseline is 2424)
         required: true
         type: string
+        default: "2424"
 permissions:
   contents: read
 jobs:
@@ -14,12 +15,24 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Verify original submission
+      - name: Record verification context
+        env:
+          SUBMISSION_ID: ${{ inputs.submission_id }}
+          DEMO_COMMIT: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          mkdir -p evidence
+          python3 -c 'import json,os; from pathlib import Path; Path("evidence/retest-context.json").write_text(json.dumps({k: os.environ[k] for k in ["SUBMISSION_ID", "DEMO_COMMIT", "RUN_ID", "RUN_ATTEMPT"]}, indent=2))'
+          cp expected.json evidence/expected.json
+      - name: Validate verification assertions
+        run: python3 -m unittest -v
+      - name: Verify processed submission
         env:
           SUBMISSION_ID: ${{ inputs.submission_id }}
         run: python3 check.py atlas --submission-id "$SUBMISSION_ID"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: atlas-verification-${{ github.run_id }}
+          name: atlas-verification-${{ github.run_id }}-${{ github.run_attempt }}
           path: evidence/

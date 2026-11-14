@@ -133,5 +133,47 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(result["status"], "coverage-failure")
 
 
+class GoRetestAssertions(unittest.TestCase):
+    """Check the real Go expectations against representative API responses."""
+
+    def setUp(self):
+        from pathlib import Path
+        import json
+        self.expected = json.loads(Path("expected.json").read_text())
+        self.submission = {"id": 2424, "repository_claim": self.expected["repository"], "status": "processed"}
+        self.edges = [dict(item) for item in self.expected["atlas_checks"]]
+
+    def result(self):
+        with patch("check.get", side_effect=[{"project_id": None}, self.edges]):
+            return atlas_result(self.submission, self.expected)
+
+    def test_correct_repo_versions_and_external_control_pass(self):
+        self.assertEqual(self.result()[1], 0)
+
+    def test_nebu_still_external_fails(self):
+        self.edges[0].update(canonical_id="pkg:golang/github.com/withobsrvr/nebu", vertex_type="external-repo")
+        self.assertEqual(self.result()[1], 1)
+
+    def test_wrong_version_fails(self):
+        self.edges[0]["version_range"] = "v0.7.1"
+        self.assertEqual(self.result()[1], 1)
+
+    def test_missing_control_fails(self):
+        self.edges.pop()
+        self.assertEqual(self.result()[1], 1)
+
+    def test_control_promoted_to_repo_fails(self):
+        self.edges[1]["vertex_type"] = "repo"
+        self.assertEqual(self.result()[1], 1)
+
+    def test_duplicate_edge_fails(self):
+        self.edges.append(dict(self.edges[0]))
+        self.assertEqual(self.result()[1], 1)
+
+    def test_exact_repo_casing_required(self):
+        self.edges[0]["canonical_id"] = self.edges[0]["canonical_id"].lower()
+        self.assertEqual(self.result()[1], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

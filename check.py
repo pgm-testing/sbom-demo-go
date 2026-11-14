@@ -129,10 +129,16 @@ def atlas_result(submission, expected):
     probes = [{"name": p["name"], "expected_repo": p["repo"],
                "pass": p["repo"].lower() in observed}
               for p in expected["probes"] if p["repo"]]
-    success = all(p["pass"] for p in probes)
+    checks = []
+    for requirement in expected.get("atlas_checks", []):
+        matches = [edge for edge in edges if edge["canonical_id"] == requirement["canonical_id"]]
+        checks.append({**requirement, "observed": matches,
+                       "pass": len(matches) == 1 and all(
+                           matches[0].get(key) == value for key, value in requirement.items())})
+    success = all(p["pass"] for p in probes) and all(check["pass"] for check in checks)
     return {"stage": "atlas", "status": "pass" if success else "coverage-failure",
             "submission_id": submission["id"], "submission": submission,
-            "edges": edges, "probes": probes}, 0 if success else 1
+            "edges": edges, "probes": probes, "atlas_checks": checks}, 0 if success else 1
 
 
 def wait_for_processing(submission_id, expected, wait_seconds, poll_interval,

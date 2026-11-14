@@ -6,7 +6,7 @@ This is an unpublished test repository and must stay unattached to an Atlas proj
 ## Expected dependencies
 
 - nebu: `pkg:golang/github.com/withObsrvr/nebu@v0.7.2` → `pkg:github/withObsrvr/nebu`
-- UUID control: `pkg:golang/github.com/google/uuid@v1.6.0` → control (SBOM assertion only)
+- UUID control: `pkg:golang/github.com/google/uuid@v1.6.0` → external UUID package (checked in the SBOM and Atlas)
 
 ## Baseline procedure
 
@@ -37,4 +37,26 @@ If the budget expires while the submission is pending, the result is `pending-ti
 
 Override the polling budget with `--processing-wait-seconds` and `--poll-interval`. Submission-record lookup has its own 90-second budget. API errors remain errors rather than being reported as pending.
 
-Repository settings should stay at their defaults unless a baseline demonstrates a necessary change. Gradle needs automatic dependency submission, enabled by Alex. Do not enable it in the other demos just to match Gradle. Alex owns backend dependency-link corrections; these demos provide evidence and verification.
+Repository settings should stay at their defaults unless a baseline demonstrates a necessary change. Gradle needs automatic dependency submission. Do not enable it in the other demos just to match Gradle.
+
+
+## Verify an existing submission
+
+Open **Actions → Verify processed Atlas submission → Run workflow**. Choose the
+reviewed demo revision and enter the submission ID. The original Go baseline is
+**2424**, which is the default. This workflow only reads Atlas API data.
+
+Download `atlas-verification-RUN_ID-RUN_ATTEMPT` to preserve the run context,
+expectations, submission details and observed dependency edges.
+
+The verifier requires the exact nebu repository ID, Repo type and version
+`v0.7.2`. UUID must remain an ExternalRepo at `v1.6.0`. The demo must have no
+project association. Require `status: pass` and `verification_complete: true`
+in `atlas-result.json`; a pending timeout is not a verified pass.
+
+The dependency API describes the current repository graph, rather than an
+immutable graph snapshot belonging to the selected submission.
+
+```sh
+python3 check.py atlas --submission-id 2424
+```

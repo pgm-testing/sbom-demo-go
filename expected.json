@@ -14,5 +14,17 @@
       "version": "v1.6.0",
       "repo": null
     }
+  ],
+  "atlas_checks": [
+    {
+      "canonical_id": "pkg:github/withObsrvr/nebu",
+      "vertex_type": "repo",
+      "version_range": "v0.7.2"
+    },
+    {
+      "canonical_id": "pkg:golang/github.com/google/uuid",
+      "vertex_type": "external-repo",
+      "version_range": "v1.6.0"
+    }
   ]
 }
