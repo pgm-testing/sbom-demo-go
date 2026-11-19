@@ -1,4 +1,4 @@
-name: Verify processed Atlas submission
+name: verify-atlas
 on:
   workflow_dispatch:
     inputs:
